@@ -25,12 +25,14 @@
   <p>Cole a URL compartilhada do Drive ou apenas o id do arquivo. O gerador tentará extrair o id automaticamente e gerar o link para preview ou download.</p>
 
   <div class="card">
-    <label for="inputUrl" style="display: block; margin-bottom: 0.25rem;"><strong>URL ou ID do Drive</strong></label>
-    <input id="inputUrl" type="text" placeholder="ex: https://drive.google.com/file/d/{{id}}" />
-    <div style="margin-top:8px">
-      <button id="btnGenerate">Gerar link de download</button>
-      <button id="btnView" class="secondary">Gerar link de visualização</button>
-    </div>
+    <form method="post" action="#">
+      <label for="inputUrl" style="display: block; margin-bottom: 0.25rem;"><strong>URL ou ID do Drive</strong></label>
+      <input id="inputUrl" type="text" placeholder="ex: https://drive.google.com/file/d/{{id}}" autofocus="on" required="true" />
+      <div style="margin-top:8px">
+        <button id="btnGenerate" type="submit">Gerar link de download</button>
+        <button id="btnView" class="secondary" type="submit">Gerar link de visualização</button>
+      </div>
+    </form>
 
     <div id="output" class="result" aria-live="polite"></div>
     <div id="note" class="error" role="status" style="display:none"></div>
@@ -162,13 +164,15 @@
       output.appendChild(alt);
     }
 
-    btnGenerate.addEventListener('click', () => {
+    btnGenerate.addEventListener('click', (e) => {
+      e.preventDefault();
       const raw = input.value;
       const id = extractFileId(raw);
       renderLinks(id, 'download');
     });
 
-    btnView.addEventListener('click', () => {
+    btnView.addEventListener('click', (e) => {
+      e.preventDefault();
       const raw = input.value;
       const id = extractFileId(raw);
       renderLinks(id, 'view');
