@@ -409,6 +409,4 @@ Este projeto é open source e está disponível para uso livre.
 
 Desenvolvido com ❤️ para facilitar o compartilhamento de arquivos do Google Drive.
 
----
-
 **Nota**: Este projeto é uma ferramenta educacional e de utilidade. Certifique-se de respeitar as políticas de uso do Google Drive e os direitos autorais dos arquivos compartilhados.
