@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gerador de Link de Download - Drive</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,100..900;1,100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+    body * { font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    body { max-width:720px; margin:40px auto; padding:0 16px; color:#111; }
+    h1 { font-size:1.4rem; margin-bottom:0.2rem; }
+    p { margin-top:0; color:#444; }
+    .card { border:1px solid #e6e6e6; padding:16px; border-radius:8px; margin-top:16px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); }
+    input[type="text"] { width:100%; padding:10px; font-size:1rem; border:1px solid #ccc; border-radius:6px; box-sizing:border-box; }
+    button { margin-top:8px; padding:10px 12px; border-radius:6px; border:0; background:#6b5cff; color:white; cursor:pointer; font-weight:600; }
+    button.secondary { background:#f2f2f2; color:#222; margin-left:8px; }
+    .result { margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    a.link { padding:8px 10px; border-radius:6px; background:#f7f7fb; border:1px solid #e2e2ff; text-decoration:none; color:#1a1a1a; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+    small { color:#666; display:block; margin-top:8px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .error { color:#b00020; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h1>Gerador de link de download - Google Drive</h1>
+  <p>Cole a URL compartilhada do Drive ou apenas o id do arquivo. O gerador tentará extrair o id automaticamente e gerar o link para preview ou download.</p>
+
+  <div class="card">
+    <label for="inputUrl" style="display: block; margin-bottom: 0.25rem;"><strong>URL ou ID do Drive</strong></label>
+    <input id="inputUrl" type="text" placeholder="ex: https://drive.google.com/file/d/{{id}}" />
+    <div style="margin-top:8px">
+      <button id="btnGenerate">Gerar link de download</button>
+      <button id="btnView" class="secondary">Gerar link de visualização</button>
+    </div>
+
+    <div id="output" class="result" aria-live="polite"></div>
+    <div id="note" class="error" role="status" style="display:none"></div>
+    <small>Observação: nem todos os arquivos do Drive permitem download direto (ex.: permissões, limites do Google ou arquivos muito grandes exigem confirmação).</small>
+  </div>
+
+  <script>
+    // Pega ID a partir de vários formatos de URL do Google Drive
+    function extractFileId(raw) {
+      if (!raw) return null;
+      raw = raw.trim();
+
+      // se já parece ser só o ID (comprimento típico 10-60, letras, números, - e _)
+      if (/^[a-zA-Z0-9_-]{10,100}$/.test(raw)) return raw;
+
+      // padrões comuns:
+      // https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+      // https://drive.google.com/open?id=FILE_ID
+      // https://drive.google.com/uc?id=FILE_ID&export=download
+      // https://drive.google.com/drive/folders/FOLDER_ID  (não coberto aqui)
+      const patterns = [
+        /\/d\/([a-zA-Z0-9_-]{10,100})/,        // /d/FILE_ID
+        /id=([a-zA-Z0-9_-]{10,100})/,          // id=FILE_ID
+        /\/folders\/([a-zA-Z0-9_-]{10,100})/,  // pasta (retorna id, mas não necessariamente arquivo)
+        /\/file\/u\/\d+\/d\/([a-zA-Z0-9_-]{10,100})/ // /file/u/0/d/FILE_ID
+      ];
+
+      for (const re of patterns) {
+        const m = raw.match(re);
+        if (m && m[1]) return m[1];
+      }
+
+      return null;
+    }
+
+    function makeDownloadLink(id) {
+      // Link direto comum. Para arquivos muito grandes o Google pode exigir confirmação.
+      return `https://drive.google.com/uc?export=download&id=${id}`;
+    }
+
+    function makeViewLink(id) {
+      return `https://drive.google.com/file/d/${id}/view?usp=sharing`;
+    }
+
+    function createAnchor(href, text, title) {
+      const a = document.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.className = 'link';
+      a.textContent = text;
+      if (title) a.title = title;
+      return a;
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      // fallback
+      const tmp = document.createElement('textarea');
+      tmp.value = text;
+      tmp.style.position = 'fixed';
+      tmp.style.left = '-9999px';
+      document.body.appendChild(tmp);
+      tmp.select();
+      try {
+        document.execCommand('copy');
+      } finally {
+        document.body.removeChild(tmp);
+      }
+      return Promise.resolve();
+    }
+
+    const input = document.getElementById('inputUrl');
+    const btnGenerate = document.getElementById('btnGenerate');
+    const btnView = document.getElementById('btnView');
+    const output = document.getElementById('output');
+    const note = document.getElementById('note');
+
+    function showError(msg) {
+      note.style.display = 'block';
+      note.textContent = msg;
+    }
+    function clearError() {
+      note.style.display = 'none';
+      note.textContent = '';
+    }
+
+    function renderLinks(id, type = 'download') {
+      output.innerHTML = '';
+      clearError();
+
+      if (!id) {
+        showError('ID não identificado. Cole a URL completa ou o ID do arquivo.');
+        return;
+      }
+
+      const downloadHref = makeDownloadLink(id);
+      const viewHref = makeViewLink(id);
+
+      if (type === 'download') {
+        const a = createAnchor(downloadHref, 'Abrir link de download (pode pedir confirmação)', 'Download direto. Export download.');
+        output.appendChild(a);
+      } else {
+        const a = createAnchor(viewHref, 'Abrir link de visualização', 'Link de visualização');
+        output.appendChild(a);
+      }
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'secondary';
+      copyBtn.textContent = 'Copiar link';
+      copyBtn.onclick = () => {
+        const href = (type === 'download') ? downloadHref : viewHref;
+        copyToClipboard(href).then(() => {
+          copyBtn.textContent = 'Copiado!';
+          setTimeout(() => copyBtn.textContent = 'Copiar link', 1400);
+        }).catch(() => {
+          copyBtn.textContent = 'Falha ao copiar';
+        });
+      };
+      output.appendChild(copyBtn);
+
+      // mostrar link alternativo (view) para conveniência
+      const alt = document.createElement('div');
+      alt.style.width = '100%';
+      alt.style.marginTop = '6px';
+      alt.innerHTML = `<small style="display: block;">Link de visualização: <a  style="display: block;" href="${viewHref}" target="_blank" rel="noopener noreferrer">${viewHref}</a></small>`;
+      output.appendChild(alt);
+    }
+
+    btnGenerate.addEventListener('click', () => {
+      const raw = input.value;
+      const id = extractFileId(raw);
+      renderLinks(id, 'download');
+    });
+
+    btnView.addEventListener('click', () => {
+      const raw = input.value;
+      const id = extractFileId(raw);
+      renderLinks(id, 'view');
+    });
+
+    // permitir Enter
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        btnGenerate.click();
+      }
+    });
+  </script>
+</body>
+</html>
